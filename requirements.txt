@@ -1,0 +1,12 @@
+pandas
+numpy
+scikit-learn==1.2.2 
+xgboost==1.7.5
+seaborn
+matplotlib
+pyyaml
+scipy
+lightgbm
+catboost
+imblearn
+h2o

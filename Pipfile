@@ -1,0 +1,25 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+pandas = "*"
+numpy = "*"
+seaborn = "*"
+matplotlib = "*"
+pyyaml = "*"
+scipy = "*"
+lightgbm = "*"
+catboost = "*"
+scikit-learn = "==1.2.2"
+xgboost = "==1.7.5"
+imblearn = "*"
+h2o = "*"
+
+[dev-packages]
+ipykernel = "*"
+
+[requires]
+python_version = "3.11"
+python_full_version = "3.11.6"
