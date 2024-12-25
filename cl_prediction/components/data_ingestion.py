@@ -9,6 +9,7 @@ import pandas as pd
 from typing import List
 from dotenv import load_dotenv
 import snowflake.connector
+from sklearn.model_selection import train_test_split
 from cl_prediction.utils.main_utils.utils import read_yaml_file
 from cl_prediction.constants.training_testing_pipeline import SCHEMA_FILE_PATH
 
@@ -57,7 +58,6 @@ class DataIngestion:
 
             # Convert to DataFrame
             df = pd.DataFrame(data, columns=columns)
-            df["TSDATE"] = pd.to_datetime(df["TSDATE"])
             current_cols = df.columns
             schema = read_yaml_file(SCHEMA_FILE_PATH)
 
@@ -66,6 +66,8 @@ class DataIngestion:
 
             #rename columns
             df.rename(columns=column_mapping, inplace=True)
+
+            
 
             # Close connection
             cursor.close()
@@ -94,13 +96,9 @@ class DataIngestion:
             # Define date ranges
            
             # Split the data based on date ranges
-            train_set = dataframe[
-                (dataframe["TSDate"] >= self.data_ingestion_config.train_start_date) & (dataframe["TSDate"] <= self.data_ingestion_config.train_end_date)
-            ]
-            
-            test_set = dataframe[
-                (dataframe["TSDate"] >= self.data_ingestion_config.test_start_date) & (dataframe["TSDate"] <= self.data_ingestion_config.test_end_date)
-            ]
+            train_set, test_set = train_test_split(
+                dataframe, test_size=self.data_ingestion_config.train_test_split_ratio
+            )
 
             logging.info("Split the dataframe into train, validation, and test sets based on date ranges.")
 

@@ -17,11 +17,12 @@ from sklearn.ensemble import (
     GradientBoostingClassifier,
     RandomForestClassifier,
 )
+from lightgbm import LGBMClassifier
 import mlflow
 from urllib.parse import urlparse
 
 import dagshub
-dagshub.init(repo_owner='mehran1414', repo_name='cl_project', mlflow=True)
+dagshub.init(repo_owner='mehran1414', repo_name='CL_prediction', mlflow=True)
 
 
 
@@ -35,7 +36,7 @@ class ModelTrainer:
             raise CLPredictionException(e,sys)
         
     def track_mlflow(self,best_model,classificationmetric):
-        mlflow.set_registry_uri("https://dagshub.com/mehran1414/tm_data.mlflow")
+        mlflow.set_registry_uri("https://dagshub.com/mehran1414/CL_prediction.mlflow")
         tracking_url_type_store = urlparse(mlflow.get_tracking_uri()).scheme
         with mlflow.start_run():
             f1_score=classificationmetric.f1_score
@@ -64,9 +65,8 @@ class ModelTrainer:
     def train_model(self,X_train,y_train,x_test,y_test):
         models = {
                 "Random Forest": RandomForestClassifier(verbose=1),
-                "Decision Tree": DecisionTreeClassifier(),
+                "Decision Tree": LGBMClassifier(),
                 "Gradient Boosting": GradientBoostingClassifier(verbose=1),
-                "Logistic Regression": LogisticRegression(verbose=1),
                 "AdaBoost": AdaBoostClassifier(),
             }
         params={

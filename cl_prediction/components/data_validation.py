@@ -2,11 +2,20 @@ from cl_prediction.entity.artifact_entity import DataIngestionArtifact,DataValid
 from cl_prediction.entity.config_entity import DataValidationConfig
 from cl_prediction.exception.exception import CLPredictionException 
 from cl_prediction.logging.logger import logging 
-from cl_prediction.constants.training_testing_pipeline import SCHEMA_FILE_PATH
+from cl_prediction.constants.training_testing_pipeline import (
+    SCHEMA_FILE_PATH,
+    DATA_DATE_COLUMN,
+    DATA_GROUPING_COLUMN,
+    TARGET_COLUMN,
+    ROLLING_FEATURES,
+    CUMULATIVE_FEATURES,
+    LOG_FEATURES,
+    FEATURES,
+)
 from scipy.stats import ks_2samp
 import pandas as pd
 import os,sys
-from cl_prediction.utils.main_utils.utils import read_yaml_file,write_yaml_file
+from cl_prediction.utils.main_utils.utils import read_yaml_file,write_yaml_file, FeatureEngineering
 
 class DataValidation:
     def __init__(self,data_ingestion_artifact:DataIngestionArtifact,
@@ -31,6 +40,20 @@ class DataValidation:
             number_of_columns=len(self._schema_config)
             logging.info(f"Required number of columns:{number_of_columns}")
             logging.info(f"Data frame has columns:{len(dataframe.columns)}")
+
+            logging.info(f"Making and adding Extra columns")
+            feature_engineering = FeatureEngineering(dataframe)
+            feature_engineering.generate_features(
+                  date_column = DATA_DATE_COLUMN,
+                    group_column = DATA_GROUPING_COLUMN,
+                    rolling_features=ROLLING_FEATURES,
+                    features = FEATURES,
+                    log_features = LOG_FEATURES,
+
+            )
+            dataframe = feature_engineering.get_dataframe()
+            logging.info(f"Added missing columns through feature engineering.")
+
             if len(dataframe.columns)==number_of_columns:
                 return True
             return False

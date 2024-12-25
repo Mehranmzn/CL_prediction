@@ -7,11 +7,18 @@ from cl_prediction.logging.logger import logging
 import pickle
 from sklearn.metrics import mean_squared_error, accuracy_score
 from sklearn.model_selection import GridSearchCV
-from cl_prediction.constants.training_testing_pipeline import DATA_WINDOW, ROLLING_FEATURES, CUMULATIVE_FEATURES, DATA_GROUPING_COLUMN
+from cl_prediction.constants.training_testing_pipeline import (
+    DATA_WINDOW, 
+    ROLLING_FEATURES,
+      CUMULATIVE_FEATURES, 
+      DATA_GROUPING_COLUMN,
+      CAP_FEATURES
+)
 import lightgbm as lgb
 import xgboost as xgb
 import catboost as cb
 from sklearn.metrics.pairwise import euclidean_distances
+from sklearn.base import BaseEstimator, TransformerMixin
 
 
 def read_yaml_file(file_path: str) -> dict:
@@ -142,25 +149,23 @@ def evaluate_models(X_train, y_train, X_test, y_test, models, param):
         raise Exception(f"An error occurred: {str(e)}")
 
 
-class FeatureEngineering:
+class FeatureEngineering(BaseEstimator, TransformerMixin):
     def __init__(self, data):
         self.data = data.copy()
-        self.group_col = DATA_GROUPING_COLUMN
-        self.feature_col = FEATURES
-        self.log_features = LOG_FEATURES
-        self.cap_features = CAP_FEATURES    
+        self.group_col = 'client_nr'
+        self.cap_features = CAP_FEATURES
 
-    def log_transform(self, feature):
+    def log_transform(self, log_features):
 
-        for col in self.log_features:
+        for col in log_features:
             self.data[col] = np.log1p(self.data[col])  # Use log(1+x) to avoid log(0)
 
         for col in self.cap_features:
             self.data[col] = self.data[col].clip(upper=self.data[col].quantile(0.99))
 
 
-        self.data.transaction_balance_ratio = self.data.total_nr_trx / self.data.max_balance
-        self.data.debit_credit_ratio = self.data.nr_debit_trx / self.data.nr_credit_trx
+        self.data['transaction_balance_ratio'] = self.data['total_nr_trx'] / self.data['max_balance']
+        self.data['debit_credit_ratio'] = self.data['nr_debit_trx'] / self.data['nr_credit_trx']
 
         # Create a binary flag for negative balances
         self.data['min_balance_negative_flag'] = (self.data['min_balance'] < 0).astype(int)
@@ -182,17 +187,32 @@ class FeatureEngineering:
         self.data['max_balance_abs'] = np.log1p(self.data['max_balance_abs'])
 
 
-    def crg_impact(self):
+    def crg_impute(self):
         # Identify customers with all CRG missing
-        clients_with_all_na_crg = clients_with_all_na_crg[clients_with_all_na_crg == True].index
+        clients_with_all_na_crg = (
+            self.data.groupby(self.group_col)['CRG']
+            .apply(lambda x: x.isna().all())
+            .reset_index()
+        )
+        clients_with_all_na_crg = clients_with_all_na_crg[clients_with_all_na_crg['CRG'] == True][self.group_col].values
 
         # Create a reference dataset for customers with valid CRG
-        valid_customers = self.data[~self.data['CRG'].isna()].groupby(self.group_col).median().reset_index()
+        valid_customers = (
+            self.data[~self.data['CRG'].isna()]
+            .groupby(self.group_col)
+            .median()
+            .reset_index()
+        )
 
         # Impute missing CRG values for customers with all NaNs
         for client in clients_with_all_na_crg:
-            # Extract the median volume_debit_trx for this client
-            client_data = self.data[self.data[self.group_col] == client][['volume_debit_trx']].median().values.reshape(1, -1)
+            # Extract the median `volume_debit_trx` for this client
+            client_data = (
+                self.data[self.data[self.group_col] == client][['volume_debit_trx']]
+                .median()
+                .values
+                .reshape(1, -1)
+            )
 
             # Compute distances to all valid customers
             valid_data = valid_customers[['volume_debit_trx']].values
@@ -200,15 +220,41 @@ class FeatureEngineering:
 
             # Find the nearest neighbor
             nearest_idx = np.argmin(distances)
-            nearest_client = valid_customers.iloc[nearest_idx]['client_nr']
+            nearest_client = valid_customers.iloc[nearest_idx][self.group_col]
 
             # Impute CRG using the nearest customer's median CRG
-            nearest_crg = self.data[self.data[self.group_col] == nearest_client]['CRG'].median()
+            nearest_crg = (
+                self.data[self.data[self.group_col] == nearest_client]['CRG']
+                .median()
+            )
             self.data.loc[self.data[self.group_col] == client, 'CRG'] = nearest_crg
+            
+    def crg_classification(self):
+        # Interaction Features with CRG
+        self.data['CRG_total_nr_trx'] = self.data['CRG'] * self.data['total_nr_trx']
+        self.data['CRG_nr_debit_trx'] = self.data['CRG'] * self.data['nr_debit_trx']
+        self.data['CRG_nr_credit_trx'] = self.data['CRG'] * self.data['nr_credit_trx']
+        self.data['CRG_volume_debit_trx'] = self.data['CRG'] * self.data['volume_debit_trx']
+        self.data['CRG_volume_credit_trx'] = self.data['CRG'] * self.data['volume_credit_trx']
+
+        # Binning CRG into categories (example: quartiles)
+        # Dynamically adjust labels based on the number of bins created
+        labels = ['Low', 'Medium-Low', 'Medium-High', 'High']  # Define initial labels
+        self.data['CRG_binned'] = pd.qcut(
+            self.data['CRG'], 
+            q=5,  # Initial number of quantiles
+            labels=labels[:4],  # Ensure labels are one fewer than the resulting bins
+            duplicates='drop'  # Drop duplicate edges
+        )
+
+
+        # Optional: Convert the binned CRG feature into dummy variables
+        self.data = pd.get_dummies(self.data, columns=['CRG_binned'], drop_first=False)
+        
 
         
 
-    def create_features(self, group_col, time_col, rolling_features, cumulative_features, window=3):
+    def create_features(self, group_col, time_col, rolling_features, window=3):
         """
         Creates rolling window features, recency, and cumulative features for the dataset.
 
@@ -300,12 +346,14 @@ class FeatureEngineering:
 
         return data
 
-    def generate_features(self, date_column: str, group_column: str,rolling_features: list , cum_features:list , features: list):
+    def generate_features(self, date_column: str, group_column: str,rolling_features: list ,  log_features: list ,features: list):
+        self.log_transform(log_features = log_features)
+        self.crg_impute()
+        self.crg_classification()
         self.create_features(
             group_col=group_column,
             time_col=date_column,
             rolling_features= rolling_features,
-            cumulative_features=cum_features,
             window=DATA_WINDOW
         )
         self.add_lagged_and_statistical_features(
@@ -316,3 +364,7 @@ class FeatureEngineering:
 
     def get_dataframe(self):
         return self.dataframe
+    
+
+
+ 

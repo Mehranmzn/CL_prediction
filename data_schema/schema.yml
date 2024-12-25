@@ -1,26 +1,27 @@
+table_name: CREDIT_LOAN
 columns:
   - name: client_nr
-  - type : int64
+    type : int64
   - name: yearmonth
-  - type : int64
+    type : int64
   - name: credit_application
-  - type : int64
+    type : int64
   - name: nr_credit_applications
-  - type : int64
+    type : int64
   - name: total_nr_trx
-  - type : int64
+    type : int64
   - name: nr_debit_trx
-  - type : int64
+    type : int64
   - name: volume_debit_trx
-  - type : int64
+    type : int64
   - name: nr_credit_trx
-  - type : int64
+    type : int64
   - name: volume_credit_trx
-  - type : int64
+    type : int64
   - name: min_balance
-  - type : int64
+    type : int64
   - name: max_balance
-  - type : int64
+    type : int64
   - name: CRG
-  - type : float64
+    type : float64
 

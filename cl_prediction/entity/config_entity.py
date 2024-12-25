@@ -38,6 +38,7 @@ class DataIngestionConfig:
         self.train_test_split_ratio: float = training_testing_pipeline.DATA_INGESTION_TRAIN_TEST_SPLIT_RATION
         self.collection_name: str = training_testing_pipeline.DATA_INGESTION_COLLECTION_NAME
         self.database_name: str = training_testing_pipeline.DATA_INGESTION_DATABASE_NAME
+        self.table_name: str = training_testing_pipeline.DATA_INGESTION_TABLE_NAME
 
 class DataValidationConfig:
     def __init__(self,training_pipeline_config:TrainingPipelineConfig):

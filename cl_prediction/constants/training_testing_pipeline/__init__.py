@@ -37,7 +37,7 @@ DATA_INGESTION_TRAIN_TEST_SPLIT_RATION: float = 0.2
 DATA_WINDOW: int = 3
 DATA_GROUPING_COLUMN: str = "client_nr"
 DATA_DATE_COLUMN: str = "yearmonth"
-
+HIGHLY_CORRELATED_FEATURES = "nr_credit_applications"
 """
 Data Split related constant start and end
 """
