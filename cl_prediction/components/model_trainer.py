@@ -4,7 +4,7 @@ from cl_prediction.exception.exception import CLPredictionException
 from cl_prediction.logging.logger import logging
 from cl_prediction.entity.artifact_entity import DataTransformationArtifact,ModelTrainerArtifact
 from cl_prediction.entity.config_entity import ModelTrainerConfig
-from cl_prediction.utils.ml_utils.model.estimator import TransactionMonitoring
+from cl_prediction.utils.ml_utils.model.estimator import CLPredictionEstimator
 from cl_prediction.utils.main_utils.utils import save_object,load_object
 from cl_prediction.utils.main_utils.utils import load_numpy_array_data,evaluate_models
 from cl_prediction.utils.ml_utils.metric.classification_metrics import get_classification_score
@@ -21,7 +21,7 @@ import mlflow
 from urllib.parse import urlparse
 
 import dagshub
-dagshub.init(repo_owner='mehran1414', repo_name='databricks_mlops', mlflow=True)
+dagshub.init(repo_owner='mehran1414', repo_name='cl_project', mlflow=True)
 
 
 

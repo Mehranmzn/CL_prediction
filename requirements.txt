@@ -10,3 +10,9 @@ lightgbm
 catboost
 imblearn
 h2o
+tslearn
+python-dotenv
+snowflake-connector-python
+pyyaml
+dagshub
+mlflow

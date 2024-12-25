@@ -19,14 +19,16 @@ list_of_files=[
     f"src/{project_name}/pipeline/__init__.py",
     f"src/{project_name}/entity/__init__.py",
     f"src/{project_name}/constants/__init__.py",
-    "config/config.yaml",
+    "data_schema/schema.yaml",
     "params.yaml",
     "app.py",
     "main.py",
     "Dockerfile",
     "requirements.txt",
     "setup.py",
-    "research/research.ipynb"
+    "research/research.ipynb",
+    "Artifacts/.gitkeep",
+    "final_model/.gitkeep",    
 
 ]
 

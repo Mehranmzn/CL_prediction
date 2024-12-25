@@ -24,7 +24,7 @@ class DataIngestion:
         try:
             self.data_ingestion_config = data_ingestion_config
         except Exception as e:
-            raise TSForecastingException(e, sys)
+            raise CLPredictionException(e, sys)
 
     def export_table_as_dataframe(self):
         """
@@ -74,7 +74,7 @@ class DataIngestion:
             return df
 
         except Exception as e:
-            raise TSForecastingException(e, sys)
+            raise CLPredictionException(e, sys)
 
     def export_data_into_feature_store(self, dataframe: pd.DataFrame):
         try:
@@ -86,7 +86,7 @@ class DataIngestion:
             return dataframe
 
         except Exception as e:
-            raise TSForecastingException(e, sys)
+            raise CLPredictionException(e, sys)
 
     def split_data_as_train_test(self, dataframe: pd.DataFrame):
         try:
@@ -97,9 +97,7 @@ class DataIngestion:
             train_set = dataframe[
                 (dataframe["TSDate"] >= self.data_ingestion_config.train_start_date) & (dataframe["TSDate"] <= self.data_ingestion_config.train_end_date)
             ]
-            val_set = dataframe[
-                (dataframe["TSDate"] >= self.data_ingestion_config.val_start_date) & (dataframe["TSDate"] <= self.data_ingestion_config.val_end_date)
-            ]
+            
             test_set = dataframe[
                 (dataframe["TSDate"] >= self.data_ingestion_config.test_start_date) & (dataframe["TSDate"] <= self.data_ingestion_config.test_end_date)
             ]
@@ -116,16 +114,14 @@ class DataIngestion:
             train_set.to_csv(
                 self.data_ingestion_config.training_file_path, index=False, header=True
             )
-            val_set.to_csv(
-                self.data_ingestion_config.val_file_path, index=False, header=True
-            )
+            
             test_set.to_csv(
                 self.data_ingestion_config.testing_file_path, index=False, header=True
             )
 
             logging.info("Successfully exported train, validation, and test datasets to file paths.")
         except Exception as e:
-            raise TSForecastingException(e, sys)
+            raise CLPredictionException(e, sys)
        
 
     def initiate_data_ingestion(self):
@@ -136,9 +132,8 @@ class DataIngestion:
             data_ingestion_artifact = DataIngestionArtifact(
                 trained_file_path=self.data_ingestion_config.training_file_path,
                 test_file_path=self.data_ingestion_config.testing_file_path,
-                val_file_path=self.data_ingestion_config.val_file_path,
             )
             return data_ingestion_artifact
 
         except Exception as e:
-            raise TSForecastingException(e, sys)
+            raise CLPredictionException(e, sys)

@@ -16,6 +16,11 @@ scikit-learn = "==1.2.2"
 xgboost = "==1.7.5"
 imblearn = "*"
 h2o = "*"
+tslearn = "*"
+python-dotenv = "*"
+snowflake-connector-python = "*"
+dagshub = "*"
+mlflow = "*"
 
 [dev-packages]
 ipykernel = "*"
