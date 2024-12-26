@@ -5,7 +5,7 @@ import pandas as pd
 from cl_prediction.exception.exception import CLPredictionException
 from cl_prediction.logging.logger import logging
 import pickle
-from sklearn.metrics import mean_squared_error, accuracy_score
+from sklearn.metrics import mean_squared_error, accuracy_score, f1_score
 from sklearn.model_selection import GridSearchCV
 from cl_prediction.constants.training_testing_pipeline import (
     DATA_WINDOW, 
@@ -19,6 +19,14 @@ import xgboost as xgb
 import catboost as cb
 from sklearn.metrics.pairwise import euclidean_distances
 from sklearn.base import BaseEstimator, TransformerMixin
+from cl_prediction.utils.ml_utils.metric.classification_metrics import get_classification_score
+import mlflow.sklearn
+from mlflow.models.signature import infer_signature
+from urllib.parse import urlparse
+from io import StringIO
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.metrics import accuracy_score, classification_report
+import json
 
 
 def read_yaml_file(file_path: str) -> dict:
@@ -87,6 +95,37 @@ def load_numpy_array_data(file_path: str) -> np.array:
     
 
 
+def sub_track_mlflow(best_model, classification_metric, classification_report, model_name, aux_info, x1,x2):
+        mlflow.set_registry_uri("https://dagshub.com/mehran1414/CL_prediction.mlflow")
+        tracking_url_type_store = urlparse(mlflow.get_tracking_uri()).scheme
+        
+        with mlflow.start_run():
+            # Log metrics
+            mlflow.log_metric("f1_score", classification_metric.f1_score)
+            mlflow.log_metric("precision", classification_metric.precision)
+            mlflow.log_metric("recall", classification_metric.recall)
+            signature = infer_signature(x1, x2)
+
+            mlflow.sklearn.log_model(best_model, "model_name", signature=signature, input_example=x1[:5])
+
+            # Log model
+            
+            # Save classification report as a text artifact
+            report_json = json.dumps(classification_report, indent=2)
+            mlflow.log_text(report_json, "classification_report.json")
+            
+            # Set tags
+            mlflow.set_tag("model_name", model_name)
+            for key, value in aux_info.items():
+                mlflow.set_tag(key, value)
+            
+            # Model registry
+            if tracking_url_type_store != "file":
+                mlflow.sklearn.log_model(best_model, "model", registered_model_name=model_name, signature=signature, input_example=x1[:5])
+            else:
+                mlflow.sklearn.log_model(best_model, "model", signature=signature, input_example=x1[:5])
+
+
 def evaluate_models(X_train, y_train, X_test, y_test, models, param):
     """
     Evaluates classification models using GridSearchCV, computes evaluation metrics, and applies calibration.
@@ -101,13 +140,10 @@ def evaluate_models(X_train, y_train, X_test, y_test, models, param):
     - report: Dictionary with model names and their best test accuracy and corresponding threshold.
     - classification_reports: Dictionary with the classification report for the best threshold for each model.
     """
-    from sklearn.calibration import CalibratedClassifierCV
-    from sklearn.metrics import accuracy_score, classification_report
-    import numpy as np
+  
 
     try:
         report = {}
-        classification_reports = {}
 
         for model_name, model in models.items():
             params = param[model_name]
@@ -129,40 +165,61 @@ def evaluate_models(X_train, y_train, X_test, y_test, models, param):
             # calibrated_model.fit(X_test, y_test)
 
             # Evaluate across multiple thresholds
-            best_accuracy = 0
+            best_f1= 0
             best_threshold = 0
             best_report = None
+            train_preds = None
 
-            for threshold in [0.1, 0.2, 0.3]:
+            for threshold in [0.1, 0.2, 0.3,0.4,0.5,0.6,0.7,0.8,0.9]:
                 # Predict calibrated probabilities
                 y_pred_proba_calibrated = final_model.predict_proba(X_test)[:, 1]
                 
                 # Adjust the prediction threshold
                 y_pred = (y_pred_proba_calibrated > threshold).astype(int)
 
-                # Calculate accuracy
-                accuracy = accuracy_score(y_test, y_pred)
-                print(f"{model_name} Accuracy at threshold {threshold}: {accuracy:.4f}")
+                f1 = f1_score(y_test, y_pred, average='macro')
+                print(f"{model_name} Macro F1 score at threshold {threshold}: {f1:.4f}")
 
-                # Store the best accuracy and corresponding threshold
-                if accuracy > best_accuracy:
-                    best_accuracy = accuracy
+                # Store the best F1 score and corresponding threshold
+                if f1 > best_f1:
+                    best_f1 = f1
                     best_threshold = threshold
                     best_report = classification_report(y_test, y_pred, output_dict=True)
+                    train_preds = get_classification_score(y_true=y_test,y_pred=y_pred)
 
-            print(f"{model_name} Best Accuracy: {best_accuracy:.4f} at Threshold: {best_threshold}")
+            print(f"{model_name} Best Macro F1 score: {best_f1:.4f} at Threshold: {best_threshold}")
 
-            save_object(f"final_model/trained_model_{model_name}.pkl",final_model)
+            save_object(f"final_model/trained_model_{model_name}.pkl", final_model)
+
+        
+            ## Auxiliary information
+            aux_info = {
+                "experiment_id": "sub_exp",
+                "dataset": "TEST",
+                "description": "Experiment Test with diff models and diff threhsolds on test data",
+                "threhsold": best_threshold,
+
+            }
+
+            # Call the function
+            sub_track_mlflow(best_model=final_model,
+                            classification_metric=train_preds,
+                            classification_report=best_report,
+                            model_name= model_name,
+                            aux_info= aux_info,
+                            x1 = X_test,
+                            x2 = final_model.predict(X_test[:5]))
+
 
             # Store the results
             report[model_name] = {
-                "best_accuracy": best_accuracy,
+                "best_f1": best_f1,
                 "best_threshold": best_threshold
             }
-            classification_reports[model_name] = best_report
+            #classification_reports[model_name] = best_report
 
         print("Evaluation completed")
-        return report, classification_reports
+        return report#, classification_reports
 
     except Exception as e:
         raise Exception(f"An error occurred: {str(e)}")
