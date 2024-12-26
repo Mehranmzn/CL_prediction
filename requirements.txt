@@ -16,3 +16,8 @@ snowflake-connector-python
 pyyaml
 dagshub
 mlflow
+fastapi
+uvicorn
+torch
+pandas-profiling
+ipywidgets

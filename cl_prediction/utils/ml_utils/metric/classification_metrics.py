@@ -32,5 +32,5 @@ def get_classification_score(y_true, y_pred) -> ClassificationMetricArtifact:
         return classification_metric
 
     except Exception as e:
-        raise Exception(f"An error occurred while calculating classification metrics: {str(e)}")
+        raise CLPredictionException(e, sys)
 

@@ -18,8 +18,12 @@ from sklearn.ensemble import (
     RandomForestClassifier,
 )
 from lightgbm import LGBMClassifier
+from io import StringIO
 import mlflow
+import mlflow.sklearn
 from urllib.parse import urlparse
+from sklearn.metrics import classification_report
+import pickle
 
 import dagshub
 dagshub.init(repo_owner='mehran1414', repo_name='CL_prediction', mlflow=True)
@@ -35,28 +39,34 @@ class ModelTrainer:
         except Exception as e:
             raise CLPredictionException(e,sys)
         
-    def track_mlflow(self,best_model,classificationmetric):
+    def track_mlflow(self, best_model, classification_metric, classification_report, model_name, aux_info):
         mlflow.set_registry_uri("https://dagshub.com/mehran1414/CL_prediction.mlflow")
         tracking_url_type_store = urlparse(mlflow.get_tracking_uri()).scheme
+        
         with mlflow.start_run():
-            f1_score=classificationmetric.f1_score
-            precision_score=classificationmetric.precision_score
-            recall_score=classificationmetric.recall_score
-
+            # Log metrics
+            mlflow.log_metric("f1_score", classification_metric.f1_score)
+            mlflow.log_metric("precision", classification_metric.precision_score)
+            mlflow.log_metric("recall", classification_metric.recall_score)
             
-
-            mlflow.log_metric("f1_score",f1_score)
-            mlflow.log_metric("precision",precision_score)
-            mlflow.log_metric("recall_score",recall_score)
-            mlflow.sklearn.log_model(best_model,"model")
-            # Model registry does not work with file store
+            # Log model
+            mlflow.sklearn.log_model(best_model, "model")
+            
+            # Save classification report as a text artifact
+            report_buf = StringIO()
+            report_buf.write(classification_report)
+            report_buf.seek(0)
+            mlflow.log_text(report_buf.getvalue(), "classification_report.txt")
+            report_buf.close()
+            
+            # Set tags
+            mlflow.set_tag("model_name", model_name)
+            for key, value in aux_info.items():
+                mlflow.set_tag(key, value)
+            
+            # Model registry
             if tracking_url_type_store != "file":
-
-                # Register the model
-                # There are other ways to use the Model Registry, which depends on the use case,
-                # please refer to the doc for more information:
-                # https://mlflow.org/docs/latest/model-registry.html#api-workflow
-                mlflow.sklearn.log_model(best_model, "model", registered_model_name=best_model)
+                mlflow.sklearn.log_model(best_model, "model", registered_model_name=model_name)
             else:
                 mlflow.sklearn.log_model(best_model, "model")
 
@@ -65,71 +75,125 @@ class ModelTrainer:
     def train_model(self,X_train,y_train,x_test,y_test):
         models = {
                 "Random Forest": RandomForestClassifier(verbose=1),
-                "Decision Tree": LGBMClassifier(),
+                "LightGBM": LGBMClassifier(),
                 "Gradient Boosting": GradientBoostingClassifier(verbose=1),
                 "AdaBoost": AdaBoostClassifier(),
             }
-        params={
-            "Decision Tree": {
-                'criterion':['gini', 'entropy', 'log_loss'],
-                # 'splitter':['best','random'],
-                # 'max_features':['sqrt','log2'],
-            },
-            "Random Forest":{
-                # 'criterion':['gini', 'entropy', 'log_loss'],
-                
-                # 'max_features':['sqrt','log2',None],
-                'n_estimators': [8,16,32,128,256]
-            },
-            "Gradient Boosting":{
-                # 'loss':['log_loss', 'exponential'],
-                'learning_rate':[.1,.01,.05,.001],
-                'subsample':[0.6,0.7,0.75,0.85,0.9],
-                # 'criterion':['squared_error', 'friedman_mse'],
-                # 'max_features':['auto','sqrt','log2'],
-                'n_estimators': [8,16,32,64,128,256]
-            },
-            "Logistic Regression":{},
-            "AdaBoost":{
-                'learning_rate':[.1,.01,.001],
-                'n_estimators': [8,16,32,64,128,256]
+        params = {
+                "Random Forest": {
+                    "n_estimators": [100, 200, 500],
+                    "max_depth": [None, 10, 20, 30],
+                    "min_samples_split": [2, 5, 10],
+                    "min_samples_leaf": [1, 2, 4],
+                    "max_features": ["sqrt", "log2", None],
+                    "bootstrap": [True, False]
+                },
+                "LightGBM": {
+                    "n_estimators": [100, 300, 500],
+                    "learning_rate": [0.05, 0.1, 0.2],
+                    "max_depth": [5, 10, 15],
+                    "reg_alpha": [0, 1, 5],
+                    "reg_lambda": [0, 1, 5]
+                },
+                "Gradient Boosting": {
+                    "n_estimators": [100, 300, 500],
+                    "learning_rate": [0.01, 0.1, 0.2],
+                    "max_depth": [3, 5, 10],
+                    "min_samples_split": [2, 5, 10],
+                    "min_samples_leaf": [1, 2, 4],
+                    "subsample": [0.8, 1.0],
+                    "max_features": ["sqrt", "log2", None]
+                },
+                "AdaBoost": {
+                    "n_estimators": [50, 100, 200],
+                    "learning_rate": [0.5, 1.0, 1.5],
+                    "algorithm": ["SAMME", "SAMME.R"]
+                }
             }
+
+        model_report, classification_reports = evaluate_models(X_train=X_train, y_train=y_train, X_test=x_test, y_test=y_test,
+                                                       models=models, param=params)
+
+        # To get best model score from dict
+        best_model_name = None
+        best_model_score = 0
+        best_model_threshold = 0
+
+        for model_name, metrics in model_report.items():
+            if metrics['best_accuracy'] > best_model_score:
+                best_model_score = metrics['best_accuracy']
+                best_model_name = model_name
+                best_model_threshold = metrics['best_threshold']
+
+        # Retrieve the best model
+        best_model = models[best_model_name]
+
+        # Print the best model details
+        print(f"Best Model: {best_model_name}")
+        print(f"Best Accuracy: {best_model_score:.4f} at Threshold: {best_model_threshold}")
+
+        #load the .pkkl model file from the path
+        with open(f"final_model/trained_model_{best_model_name}.pkl") as f:
+            best_model = pickle.load(f)
+
+        y_train_pred=best_model.predict_proba(X_train)[:, 1]
+        y_train_pred = (y_train_pred > best_model_threshold).astype(int)
+
+        preds = best_model.predict(X_train)
+
+        classification_train_metric=get_classification_score(y_true=y_train,y_pred=preds)
+
+        cs_report = classification_report(y_train,  y_train_pred)
+        ## Auxiliary information
+        aux_info = {
+            "experiment_id": "exp_01",
+            "dataset": "train",
+            "description": "Experiment with calibration and Feature engineering ",
+            "threhsold": best_model_threshold,
             
         }
-        model_report:dict=evaluate_models(X_train=X_train,y_train=y_train,X_test=x_test,y_test=y_test,
-                                          models=models,param=params)
+
+        # Call the function
+        self.track_mlflow(best_model=best_model,
+                        classification_metric=classification_train_metric,
+                        classification_report=cs_report,
+                        model_name= model_name,
+                        aux_info= aux_info)
+
         
-        ## To get best model score from dict
-        best_model_score = max(sorted(model_report.values()))
 
-        ## To get best model name from dict
+        y_test_pred=best_model.predict_proba(x_test)[:, 1]
+        preds = best_model.predict(x_test)
+        classification_test_metric=get_classification_score(y_true=y_test,y_pred=preds)
 
-        best_model_name = list(model_report.keys())[
-            list(model_report.values()).index(best_model_score)
-        ]
-        best_model = models[best_model_name]
-        y_train_pred=best_model.predict(X_train)
+        y_test_pred = (y_test_pred > best_model_threshold).astype(int)
 
-        classification_train_metric=get_classification_score(y_true=y_train,y_pred=y_train_pred)
+        cs_report_test = classification_report(y_test,  y_test_pred)
+        ## Auxiliary information
+        aux_info = {
+            "experiment_id": "exp_01",
+            "dataset": "test",
+            "description": "Experiment Test with calibration and Feature engineering ",
+            "threhsold": best_model_threshold,
+
+        }
+
+        # Call the function
+        self.track_mlflow(best_model=best_model,
+                        classification_metric=classification_test_metric,
+                        classification_report=cs_report_test,
+                        model_name= model_name,
+                        aux_info= aux_info)
         
-        ## Track the experiements with mlflow
-        self.track_mlflow(best_model,classification_train_metric)
-
-
-        y_test_pred=best_model.predict(x_test)
-        classification_test_metric=get_classification_score(y_true=y_test,y_pred=y_test_pred)
-
-        self.track_mlflow(best_model,classification_test_metric)
-
         preprocessor = load_object(file_path=self.data_transformation_artifact.transformed_object_file_path)
             
         model_dir_path = os.path.dirname(self.model_trainer_config.trained_model_file_path)
         os.makedirs(model_dir_path,exist_ok=True)
 
-        TM_Model=TransactionMonitoring(preprocessor=preprocessor,model=best_model)
-        save_object(self.model_trainer_config.trained_model_file_path,obj=TransactionMonitoring)
+        TM_Model=CLPredictionEstimator(preprocessor=preprocessor,model=best_model)
+        save_object(self.model_trainer_config.trained_model_file_path,obj=CLPredictionEstimator)
         #model pusher
-        save_object("final_model/model.pkl",best_model)
+        save_object("final_model/final_model.pkl",best_model)
         
 
         ## Model Trainer Artifact

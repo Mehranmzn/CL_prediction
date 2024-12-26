@@ -12,7 +12,7 @@ from cl_prediction.constants.training_testing_pipeline import (
     DATA_DATE_COLUMN,
     HIGHLY_CORRELATED_FEATURES,
     LOG_FEATURES,
-    CAP_FEATURES
+    CAP_FEATURES, SCHEMA_FILE_PATH
 )
 from cl_prediction.constants.training_testing_pipeline import DATA_TRANSFORMATION_IMPUTER_PARAMS
 
@@ -24,7 +24,7 @@ from cl_prediction.entity.artifact_entity import (
 from cl_prediction.entity.config_entity import DataTransformationConfig
 from cl_prediction.exception.exception import CLPredictionException 
 from cl_prediction.logging.logger import logging
-from cl_prediction.utils.main_utils.utils import save_numpy_array_data,save_object
+from cl_prediction.utils.main_utils.utils import save_numpy_array_data,save_object, read_yaml_file
 
 class DataTransformation:
     def __init__(self,data_validation_artifact:DataValidationArtifact,
@@ -56,12 +56,19 @@ class DataTransformation:
                 f"Initialized KNNImputer with {DATA_TRANSFORMATION_IMPUTER_PARAMS}"
             )
 
+            schema = read_yaml_file(SCHEMA_FILE_PATH)
+
+            numerical_columns = [
+                column["name"]
+                for column in schema["columns"]
+                if column["type"] in ["INTEGER", "FLOAT"]
+            ]
 
             # Combine the transformations using ColumnTransformer
             preprocessor = ColumnTransformer(
                 transformers=[
 
-                    ("imputer", imputer, FEATURES),  # Apply imputer to all numeric columns
+                    ("imputer", imputer, numerical_columns),  # Apply imputer to all numeric columns
                 ],
                 remainder="passthrough"  # Keep the remaining columns as they are
             )
@@ -77,7 +84,6 @@ class DataTransformation:
             train_df=DataTransformation.read_data(self.data_validation_artifact.valid_train_file_path)
             test_df=DataTransformation.read_data(self.data_validation_artifact.valid_test_file_path)
 
-            
             ## training dataframe
             input_feature_train_df=train_df.drop(
                 columns=[TARGET_COLUMN],
@@ -92,12 +98,15 @@ class DataTransformation:
                 axis=1
             )
             target_feature_test_df = test_df[TARGET_COLUMN]
+
+
                       
             preprocessor=self.get_data_transformer_object()
 
-            preprocessor_object=preprocessor.fit(data = input_feature_train_df)
+            preprocessor_object=preprocessor.fit(input_feature_train_df)
             transformed_input_train_feature=preprocessor_object.transform(input_feature_train_df)
             transformed_input_test_feature =preprocessor_object.transform(input_feature_test_df)
+
              
             # Convert transformed data back to DataFrame for column manipulation
             train_transformed_df = pd.DataFrame(transformed_input_train_feature, columns=train_df.drop(columns=[TARGET_COLUMN]).columns)

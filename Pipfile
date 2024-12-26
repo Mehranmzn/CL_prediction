@@ -21,6 +21,12 @@ python-dotenv = "*"
 snowflake-connector-python = "*"
 dagshub = "*"
 mlflow = "*"
+fastapi = "*"
+uvicorn = "*"
+tensorflow = "*"
+pandas-profiling = "*"
+ipywidgets = "*"
+torch = "*"
 
 [dev-packages]
 ipykernel = "*"

@@ -89,7 +89,7 @@ def load_numpy_array_data(file_path: str) -> np.array:
 
 def evaluate_models(X_train, y_train, X_test, y_test, models, param):
     """
-    Evaluates classification models using GridSearchCV and computes evaluation metrics.
+    Evaluates classification models using GridSearchCV, computes evaluation metrics, and applies calibration.
 
     Args:
     - X_train, y_train: Training data and labels.
@@ -98,18 +98,22 @@ def evaluate_models(X_train, y_train, X_test, y_test, models, param):
     - param: Dictionary of hyperparameters for each model.
 
     Returns:
-    - report: Dictionary with model names and their test accuracies.
+    - report: Dictionary with model names and their best test accuracy and corresponding threshold.
+    - classification_reports: Dictionary with the classification report for the best threshold for each model.
     """
+    from sklearn.calibration import CalibratedClassifierCV
+    from sklearn.metrics import accuracy_score, classification_report
+    import numpy as np
+
     try:
         report = {}
+        classification_reports = {}
 
-        for i in range(len(list(models))):
-            model_name = list(models.keys())[i]
-            model = list(models.values())[i]
-            params = param[list(models.keys())[i]]
+        for model_name, model in models.items():
+            params = param[model_name]
 
             # Use GridSearchCV to find the best parameters
-            grid_search = GridSearchCV(estimator=model, param_grid=params, cv=3, scoring="accuracy", verbose=1)
+            grid_search = GridSearchCV(estimator=model, param_grid=params, cv=3, scoring="f1", verbose=1)
             grid_search.fit(X_train, y_train)
 
             # Get the best parameters
@@ -117,41 +121,57 @@ def evaluate_models(X_train, y_train, X_test, y_test, models, param):
             print(f"Best parameters for {model_name}: {best_params}")
 
             # Train the final model using the best parameters
-            if model_name == 'LightGBM':
-                final_model = lgb.LGBMClassifier(**best_params)
-            elif model_name == 'XGBoost':
-                final_model = xgb.XGBClassifier(**best_params)
-            elif model_name == 'CatBoost':
-                final_model = cb.CatBoostClassifier(**best_params, verbose=0)
-            else:
-                final_model = model.set_params(**best_params)
-
+            final_model = model.set_params(**best_params)
             final_model.fit(X_train, y_train)
 
-            # Predictions
-            y_train_pred = final_model.predict(X_train)
-            y_test_pred = final_model.predict(X_test)
+            # # Wrap the model with calibration
+            # calibrated_model = CalibratedClassifierCV(base_estimator=final_model)
+            # calibrated_model.fit(X_test, y_test)
 
-            # Calculate evaluation metrics
-            train_accuracy = accuracy_score(y_train, y_train_pred)
-            test_accuracy = accuracy_score(y_test, y_test_pred)
+            # Evaluate across multiple thresholds
+            best_accuracy = 0
+            best_threshold = 0
+            best_report = None
 
-            print(f"{model_name} Train Accuracy: {train_accuracy:.4f}")
-            print(f"{model_name} Test Accuracy: {test_accuracy:.4f}")
+            for threshold in [0.1, 0.2, 0.3]:
+                # Predict calibrated probabilities
+                y_pred_proba_calibrated = final_model.predict_proba(X_test)[:, 1]
+                
+                # Adjust the prediction threshold
+                y_pred = (y_pred_proba_calibrated > threshold).astype(int)
 
-            # Store the test accuracy in the report
-            report[model_name] = test_accuracy
+                # Calculate accuracy
+                accuracy = accuracy_score(y_test, y_pred)
+                print(f"{model_name} Accuracy at threshold {threshold}: {accuracy:.4f}")
+
+                # Store the best accuracy and corresponding threshold
+                if accuracy > best_accuracy:
+                    best_accuracy = accuracy
+                    best_threshold = threshold
+                    best_report = classification_report(y_test, y_pred, output_dict=True)
+
+            print(f"{model_name} Best Accuracy: {best_accuracy:.4f} at Threshold: {best_threshold}")
+
+            save_object(f"final_model/trained_model_{model_name}.pkl",final_model)
+
+            # Store the results
+            report[model_name] = {
+                "best_accuracy": best_accuracy,
+                "best_threshold": best_threshold
+            }
+            classification_reports[model_name] = best_report
 
         print("Evaluation completed")
-        return report
+        return report, classification_reports
 
     except Exception as e:
         raise Exception(f"An error occurred: {str(e)}")
 
 
-class FeatureEngineering(BaseEstimator, TransformerMixin):
-    def __init__(self, data):
-        self.data = data.copy()
+
+class FeatureEngineering():
+    def __init__(self, dataframe):
+        self.data = dataframe.copy()
         self.group_col = 'client_nr'
         self.cap_features = CAP_FEATURES
 
@@ -268,17 +288,17 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
         Returns:
         - DataFrame with new rolling, recency, and cumulative features.
         """
-        data = self.data.sort_values(by=[group_col, time_col])
+        self.data = self.data.sort_values(by=[group_col, time_col])
 
         # Rolling window features
         for feature in rolling_features:
-            data[f'{feature}_rolling_mean_{window}'] = data.groupby(group_col)[feature].transform(
+            self.data[f'{feature}_rolling_mean_{window}'] = self.data.groupby(group_col)[feature].transform(
                 lambda x: x.rolling(window, min_periods=1).mean()
             )
-            data[f'{feature}_rolling_std_{window}'] = data.groupby(group_col)[feature].transform(
+            self.data[f'{feature}_rolling_std_{window}'] = self.data.groupby(group_col)[feature].transform(
                 lambda x: x.rolling(window, min_periods=1).std()
             )
-            data[f'{feature}_rolling_sum_{window}'] = data.groupby(group_col)[feature].transform(
+            self.data[f'{feature}_rolling_sum_{window}'] = self.data.groupby(group_col)[feature].transform(
                 lambda x: x.rolling(window, min_periods=1).sum()
             )
 
@@ -286,7 +306,7 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
         def calculate_past_6_months_flag_excluding_current(x):
             return x.shift().rolling(window=6, min_periods=1).max()
 
-        data['recency_6_months'] = data.groupby(group_col)['credit_application'].transform(
+        self.data['recency_6_months'] = self.data.groupby(group_col)['credit_application'].transform(
             calculate_past_6_months_flag_excluding_current
         )
 
@@ -294,16 +314,16 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
         def calculate_past_6_months_count_excluding_current(x):
             return x.shift().rolling(window=6, min_periods=1).sum()
 
-        data['nr_applications_6_months'] = data.groupby(group_col)['nr_credit_applications'].transform(
+        self.data['nr_applications_6_months'] = self.data.groupby(group_col)['nr_credit_applications'].transform(
             calculate_past_6_months_count_excluding_current
         )
 
         # Handle missing values with backward fill and median replacement
-        data = data.groupby(group_col).apply(lambda group: group.fillna(method='bfill'))
-        data.fillna(data.median(), inplace=True)
-        data.reset_index(drop=True, inplace=True)
+        self.data = self.data.groupby(group_col).apply(lambda group: group.fillna(method='bfill'))
+        self.data.fillna(self.data.median(), inplace=True)
+        self.data.reset_index(drop=True, inplace=True)
 
-        return data
+        return self.data
 
     def add_lagged_and_statistical_features(self, group_col, features):
         """
@@ -316,35 +336,33 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
         Returns:
         - DataFrame with lagged and statistical features added.
         """
-        data = self.data
-
         # Lagged features from 1 to 6 months
         for lag in range(1, 7):
             for feature in features:
-                data[f'{feature}_lag_{lag}'] = data.groupby(group_col)[feature].shift(lag)
+                self.data[f'{feature}_lag_{lag}'] = self.data.groupby(group_col)[feature].shift(lag)
 
         # Min, Max, Mean, and Std for the previous 2, 3, 4, 5, 6 months
         for window_size in range(2, 7):
             for feature in features:
-                data[f'{feature}_min_last_{window_size}'] = data.groupby(group_col)[feature].transform(
+                self.data[f'{feature}_min_last_{window_size}'] = self.data.groupby(group_col)[feature].transform(
                     lambda x: x.shift().rolling(window=window_size, min_periods=1).min()
                 )
-                data[f'{feature}_max_last_{window_size}'] = data.groupby(group_col)[feature].transform(
+                self.data[f'{feature}_max_last_{window_size}'] = self.data.groupby(group_col)[feature].transform(
                     lambda x: x.shift().rolling(window=window_size, min_periods=1).max()
                 )
-                data[f'{feature}_mean_last_{window_size}'] = data.groupby(group_col)[feature].transform(
+                self.data[f'{feature}_mean_last_{window_size}'] = self.data.groupby(group_col)[feature].transform(
                     lambda x: x.shift().rolling(window=window_size, min_periods=1).mean()
                 )
-                data[f'{feature}_std_last_{window_size}'] = data.groupby(group_col)[feature].transform(
+                self.data[f'{feature}_std_last_{window_size}'] = self.data.groupby(group_col)[feature].transform(
                     lambda x: x.shift().rolling(window=window_size, min_periods=1).std()
                 )
 
         # Handle missing values with backward fill and median replacement
-        data = data.groupby(group_col).apply(lambda group: group.fillna(method='bfill'))
-        data.fillna(data.median(), inplace=True)
-        data.reset_index(drop=True, inplace=True)
+        self.data = self.data.groupby(group_col).apply(lambda group: group.fillna(method='bfill'))
+        self.data.fillna(self.data.median(), inplace=True)
+        self.data.reset_index(drop=True, inplace=True)
 
-        return data
+        return self.data
 
     def generate_features(self, date_column: str, group_column: str,rolling_features: list ,  log_features: list ,features: list):
         self.log_transform(log_features = log_features)
@@ -363,7 +381,7 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
 
 
     def get_dataframe(self):
-        return self.dataframe
+        return self.data
     
 
 
