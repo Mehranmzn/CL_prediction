@@ -23,7 +23,6 @@ from cl_prediction.utils.ml_utils.metric.classification_metrics import get_class
 import mlflow.sklearn
 from mlflow.models.signature import infer_signature
 from urllib.parse import urlparse
-from io import StringIO
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import accuracy_score, classification_report
 import json

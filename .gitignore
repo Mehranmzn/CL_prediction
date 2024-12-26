@@ -171,3 +171,4 @@ cython_debug/
 .pypirc
 **.DS_Store
 final_model/trained*
+final_model/trained_model_LightGBM.pkl

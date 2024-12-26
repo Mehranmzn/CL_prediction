@@ -1,0 +1,36 @@
+CRG:
+  drift_status: true
+  p_value: .nan
+client_nr:
+  drift_status: false
+  p_value: 0.741533119245356
+credit_application:
+  drift_status: false
+  p_value: 0.9999999999985223
+max_balance:
+  drift_status: false
+  p_value: 0.8511336497389907
+min_balance:
+  drift_status: false
+  p_value: 0.6601802724860562
+nr_credit_applications:
+  drift_status: false
+  p_value: 0.9999999999985223
+nr_credit_trx:
+  drift_status: true
+  p_value: 0.03558947353817976
+nr_debit_trx:
+  drift_status: false
+  p_value: 0.053457637464229824
+total_nr_trx:
+  drift_status: true
+  p_value: 0.02468883353451934
+volume_credit_trx:
+  drift_status: false
+  p_value: 0.4181300660628051
+volume_debit_trx:
+  drift_status: false
+  p_value: 0.40295612368924005
+yearmonth:
+  drift_status: false
+  p_value: 0.8328606849475391
