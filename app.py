@@ -6,7 +6,7 @@ from cl_prediction.exception.exception import CLPredictionException
 from cl_prediction.logging.logger import logging
 from cl_prediction.pipeline.training_pipeline import TrainingPipeline
 from cl_prediction.utils.main_utils.utils import load_object
-from cl_prediction.utils.ml_utils.model.estimator import TSForecastingEstimator
+from cl_prediction.utils.ml_utils.model.estimator import CLPredictionEstimator
 from cl_prediction.constants.training_testing_pipeline import (
     DATA_INGESTION_COLLECTION_NAME,
     DATA_INGESTION_DATABASE_NAME,
@@ -74,7 +74,7 @@ async def train_route():
         train_pipeline.run_pipeline()
         return Response("Training is successful")
     except Exception as e:
-        raise TSForecastingException(e, sys)
+        raise CLPredictionException(e, sys)
 
 @app.post("/predict")
 async def predict_route(request: Request, file: UploadFile = File(...)):
@@ -89,7 +89,7 @@ async def predict_route(request: Request, file: UploadFile = File(...)):
         table_html = df.to_html(classes='table table-striped')
         return templates.TemplateResponse("index.html", {"request": request, "table": table_html})
     except Exception as e:
-        raise TSForecastingException(e, sys)
+        raise CLPredictionException(e, sys)
 
 if __name__ == "__main__":
     app_run(app, host="0.0.0.0", port=8000)
