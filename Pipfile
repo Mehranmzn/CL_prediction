@@ -27,7 +27,8 @@ uvicorn = "*"
 torch = "*"
 pandas-profiling = "*"
 ipywidgets = "*"
-python-multipart = "*"
+torch = "*"
+imbalanced-learn = "*"
 
 [dev-packages]
 ipykernel = "*"

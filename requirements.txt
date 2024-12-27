@@ -21,4 +21,4 @@ uvicorn
 torch
 pandas-profiling
 ipywidgets
-python-multipart
+imbalanced-learn
