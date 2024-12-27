@@ -27,6 +27,7 @@ uvicorn = "*"
 torch = "*"
 pandas-profiling = "*"
 ipywidgets = "*"
+python-multipart = "*"
 
 [dev-packages]
 ipykernel = "*"
