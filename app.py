@@ -82,7 +82,7 @@ async def predict_route(request: Request, file: UploadFile = File(...)):
         df = pd.read_csv(file.file)
         preprocesor = load_object("final_model/preprocessor.pkl")
         final_model = load_object("final_model/model.pkl")
-        network_model = TSForecastingEstimator(preprocessor=preprocesor, model=final_model)
+        network_model = CLPredictionEstimator(preprocessor=preprocesor, model=final_model)
         y_pred = network_model.predict(df)
         df['predicted_column'] = y_pred
         df.to_csv('app_output/output.csv')
