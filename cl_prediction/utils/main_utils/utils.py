@@ -24,6 +24,7 @@ import mlflow.sklearn
 from mlflow.models.signature import infer_signature
 from urllib.parse import urlparse
 from sklearn.calibration import CalibratedClassifierCV
+from sklearn.model_selection import GroupKFold
 from sklearn.metrics import accuracy_score, classification_report
 import json
 
@@ -147,8 +148,18 @@ def evaluate_models(X_train, y_train, X_test, y_test, models, param):
         for model_name, model in models.items():
             params = param[model_name]
 
+            group_kfold = GroupKFold(n_splits=3)
+
             # Use GridSearchCV to find the best parameters
-            grid_search = GridSearchCV(estimator=model, param_grid=params, cv=3, scoring="f1", verbose=1)
+            #grid_search = GridSearchCV(estimator=model, param_grid=params, cv=3, scoring="f1", verbose=1)
+            grid_search = GridSearchCV(
+                estimator=model,
+                param_grid=params,
+                cv=group_kfold.split(X_train, y_train, X_train[:, 0]),
+                scoring="f1",
+                verbose=1
+            )
+            
             grid_search.fit(X_train, y_train)
 
             # Get the best parameters

@@ -86,7 +86,7 @@ class DataTransformation:
 
             ## training dataframe
             input_feature_train_df=train_df.drop(
-                columns=[TARGET_COLUMN],
+                columns=[DATA_GROUPING_COLUMN,TARGET_COLUMN],
                 axis=1
             )
             
@@ -94,7 +94,7 @@ class DataTransformation:
 
             #testing dataframe
             input_feature_test_df = test_df.drop(
-                columns=[TARGET_COLUMN], 
+                columns=[DATA_GROUPING_COLUMN, TARGET_COLUMN], 
                 axis=1
             )
             target_feature_test_df = test_df[TARGET_COLUMN]
