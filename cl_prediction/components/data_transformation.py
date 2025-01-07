@@ -2,7 +2,7 @@ import sys
 import os
 import numpy as np
 import pandas as pd
-from sklearn.impute import KNNImputer
+from sklearn.impute import KNNImputer, SimpleImputer
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.pipeline import Pipeline
@@ -50,8 +50,11 @@ class DataTransformation:
             "Entered get_data_transformer_object method of Transformation class"
         )
         try:
-           # Initialize the KNNImputer
-            imputer = KNNImputer(**DATA_TRANSFORMATION_IMPUTER_PARAMS)
+           # Initialize the 
+            imputer = SimpleImputer(strategy='median')
+            #or KNNImputer
+            # imputer = KNNImputer(**DATA_TRANSFORMATION_IMPUTER_PARAMS)
+            
             logging.info(
                 f"Initialized KNNImputer with {DATA_TRANSFORMATION_IMPUTER_PARAMS}"
             )
