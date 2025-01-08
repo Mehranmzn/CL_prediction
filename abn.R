@@ -59,3 +59,25 @@ ggplot(data, aes(x = predicted_prob, y = credit_application)) +
 
 # Optional: Diagnostic plots
 plot(model)
+
+
+# Extract variance components from the model
+var_components <- as.data.frame(VarCorr(model))
+
+# Variance of the random effects
+var_yearmonth <- var_components[var_components$grp == "yearmonth", "vcov"]
+var_client_nr <- var_components[var_components$grp == "client_nr", "vcov"]
+
+# Residual variance for logistic regression
+residual_variance <- pi^2 / 3
+
+# Calculate ICC for yearmonth
+icc_yearmonth <- var_yearmonth / (var_yearmonth + var_client_nr + residual_variance)
+
+# Calculate ICC for client_nr
+icc_client_nr <- var_client_nr / (var_yearmonth + var_client_nr + residual_variance)
+
+# Display the ICC values
+icc_yearmonth
+icc_client_nr
+
